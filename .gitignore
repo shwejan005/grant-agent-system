@@ -1,23 +1,35 @@
 # Python
 __pycache__/
 *.py[cod]
+*.so
+*.egg
 *.egg-info/
 dist/
 build/
 venv/
 .venv/
+env/
+
+# Environment
+.env
+
+# Data
+data/
 *.db
 
-# Node
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/
+
+# Node (legacy)
 node_modules/
 .next/
-out/
-
-# Env
-.env
-.env.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
