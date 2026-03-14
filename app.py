@@ -1,9 +1,13 @@
 """
 Streamlit UI for the AI Research Grant Proposal Generator & Evaluator.
-Minimalist academic design — white background, black text, League Spartan font.
+Refined editorial aesthetic design — white background, black text, Syne & DM Sans.
 """
 import streamlit as st
 import io
+import sqlite3
+import os
+import json
+import plotly.express as px
 from fpdf import FPDF
 from crew.grant_crew import run_grant_crew
 from config import GEMINI_API_KEY
@@ -19,121 +23,164 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────────────────────
-# Custom CSS — strict white + black, League Spartan
+# Custom CSS — Refined Brutalism
 # ─────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=League+Spartan:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Syne:wght@400..800&display=swap');
 
-    /* Global background */
     html, body, .stApp {
         background-color: #ffffff !important;
+        font-family: 'DM Sans', sans-serif !important;
+        color: #0a0a0a !important;
     }
 
-    /* Header area */
-    header[data-testid="stHeader"] {
-        background-color: #ffffff !important;
+    h1, h2, h3, h4, h5, h6 {
+        font-family: 'Syne', sans-serif !important;
+        color: #0a0a0a !important;
+        letter-spacing: -0.02em !important;
     }
 
-    /* Apply font to text elements only, NOT to widget internals */
-    .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .stApp h6,
-    .stApp p, .stApp label, .stApp li, .stApp td, .stApp th,
-    .stMarkdown, .stMarkdown p, .stMarkdown li,
-    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3,
-    .stTextInput input, .stTextArea textarea,
-    [data-testid="stMetricValue"], [data-testid="stMetricLabel"] {
-        font-family: 'League Spartan', sans-serif !important;
-        color: #000000 !important;
+    [data-testid="stHeader"] { background-color: transparent !important; }
+
+    /* .block-container */
+    .block-container {
+        max-width: 1100px !important;
+        padding: 2rem 3rem !important;
     }
 
     /* Sidebar */
     section[data-testid="stSidebar"] {
-        background-color: #f8f8f8 !important;
+        background-color: #f5f5f5 !important;
         border-right: 1px solid #e0e0e0 !important;
     }
-    section[data-testid="stSidebar"] h1,
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] li,
-    section[data-testid="stSidebar"] small {
-        color: #000000 !important;
-        font-family: 'League Spartan', sans-serif !important;
+    section[data-testid="stSidebar"] > div {
+        box-shadow: none !important;
+    }
+
+    /* Buttons */
+    .stButton > button,
+    .stDownloadButton > button {
+        background-color: #0a0a0a !important;
+        color: #ffffff !important;
+        border-radius: 0 !important;
+        border: none !important;
+        font-family: 'Syne', sans-serif !important;
+        font-size: 0.8rem !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+        box-shadow: none !important;
+    }
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
+        background-color: #333333 !important;
+        color: #ffffff !important;
+    }
+    .stButton > button p,
+    .stDownloadButton > button p { color: #ffffff !important; }
+
+    /* Inputs */
+    .stTextInput input, .stTextArea textarea, [data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border: 1px solid #0a0a0a !important;
+        border-radius: 0 !important;
+        font-family: 'DM Sans', sans-serif !important;
+        color: #0a0a0a !important;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus, [data-baseweb="select"] > div:focus-within {
+        outline: 2px solid #0a0a0a !important;
+        outline-offset: -1px;
+        border-color: #0a0a0a !important;
+        box-shadow: none !important;
     }
 
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 0px;
-        border-bottom: 2px solid #e0e0e0;
+        gap: 0;
+        border-bottom: 1px solid #e0e0e0 !important;
     }
     .stTabs [data-baseweb="tab"] {
-        color: #666666 !important;
-        background-color: #ffffff !important;
+        font-family: 'Syne', sans-serif !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.1em !important;
+        background-color: transparent !important;
+        color: #6b6b6b !important;
         border: none !important;
-        padding: 10px 24px !important;
-        font-weight: 500 !important;
-        font-size: 15px !important;
+        padding-bottom: 1rem !important;
+        padding-top: 1rem !important;
+        margin-right: 2rem !important;
     }
     .stTabs [aria-selected="true"] {
-        color: #000000 !important;
-        border-bottom: 3px solid #000000 !important;
-        font-weight: 600 !important;
+        color: #0a0a0a !important;
+        border-bottom: 2px solid #0a0a0a !important;
+    }
+
+    /* Tables */
+    table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        font-family: 'DM Sans', sans-serif !important;
+        margin-bottom: 2rem !important;
+    }
+    th {
+        background-color: #0a0a0a !important;
+        color: #ffffff !important;
+        font-family: 'Syne', sans-serif !important;
+        padding: 0.8rem !important;
+        text-align: left !important;
+        border: 1px solid #0a0a0a !important;
+        font-weight: normal !important;
+    }
+    td {
+        padding: 0.8rem !important;
+        border: 1px solid #0a0a0a !important;
+        color: #0a0a0a !important;
+        background-color: #ffffff !important;
+    }
+    tr:nth-child(even) td {
+        background-color: #f5f5f5 !important;
     }
 
     /* Metrics */
     [data-testid="stMetric"] {
-        background-color: #f8f8f8 !important;
-        border: 1px solid #e0e0e0 !important;
-        border-radius: 8px !important;
-        padding: 16px !important;
-    }
-    [data-testid="stMetricValue"] {
-        color: #000000 !important;
-        font-weight: 700 !important;
+        background-color: #f5f5f5 !important;
+        border: 1px solid #0a0a0a !important;
+        border-radius: 0 !important;
+        padding: 1.5rem !important;
+        text-align: left !important;
     }
     [data-testid="stMetricLabel"] {
-        color: #333333 !important;
+        font-family: 'Syne', sans-serif !important;
+        color: #6b6b6b !important;
+        text-transform: uppercase !important;
+        font-size: 0.8rem !important;
+        letter-spacing: 0.05em !important;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'DM Sans', sans-serif !important;
+        color: #0a0a0a !important;
     }
 
-    /* Buttons — white text on black background */
-    .stButton > button,
-    .stDownloadButton > button {
-        background-color: #000000 !important;
-        color: #ffffff !important;
-        border: none !important;
-        border-radius: 6px !important;
-        font-family: 'League Spartan', sans-serif !important;
-        font-weight: 600 !important;
-        padding: 8px 24px !important;
-        transition: opacity 0.2s !important;
+    /* Progress */
+    .stProgress > div > div {
+        background-color: #0a0a0a !important;
     }
-    .stButton > button:hover,
-    .stDownloadButton > button:hover {
-        opacity: 0.85 !important;
-        color: #ffffff !important;
-    }
-    .stButton > button p,
-    .stDownloadButton > button p,
-    .stButton > button span,
-    .stDownloadButton > button span {
-        color: #ffffff !important;
+    .stProgress > div {
+        background-color: #e0e0e0 !important;
     }
 
-    /* Text inputs */
-    .stTextInput input, .stTextArea textarea {
-        background-color: #ffffff !important;
-        color: #000000 !important;
-        border: 1px solid #cccccc !important;
-        border-radius: 6px !important;
-        font-family: 'League Spartan', sans-serif !important;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #000000 !important;
-        box-shadow: none !important;
+    /* Blockquote */
+    blockquote {
+        margin: 1.5rem 0 !important;
+        padding: 1.5rem !important;
+        border-left: 3px solid #0a0a0a !important;
+        background-color: #f5f5f5 !important;
+        color: #6b6b6b !important;
+        font-style: italic !important;
+        font-family: 'DM Sans', sans-serif !important;
     }
 
-    /* Slider */
+    /* Slider label color */
     .stSlider [data-baseweb="slider"] {
         color: #000000 !important;
     }
@@ -143,105 +190,105 @@ st.markdown("""
 
     /* Expander */
     .streamlit-expanderHeader {
-        color: #000000 !important;
-        font-weight: 600 !important;
-        background-color: #f8f8f8 !important;
-        border: 1px solid #e0e0e0 !important;
-        border-radius: 6px !important;
+        font-family: 'Syne', sans-serif !important;
+        color: #0a0a0a !important;
     }
-
-    /* Tables */
-    .stTable, .stDataFrame {
-        border: 1px solid #e0e0e0 !important;
-    }
-    table {
-        border-collapse: collapse !important;
-    }
-    th {
-        background-color: #f0f0f0 !important;
-        font-weight: 600 !important;
-    }
-    td, th {
-        border: 1px solid #e0e0e0 !important;
-        padding: 8px 12px !important;
-    }
-
-    /* Progress bar */
-    .stProgress > div > div {
-        background-color: #000000 !important;
-    }
-
-    /* Divider */
+    
     hr {
         border-color: #e0e0e0 !important;
     }
-
-    /* Status messages */
-    .stSuccess, .stInfo, .stWarning, .stError {
-        font-family: 'League Spartan', sans-serif !important;
+    
+    /* Code Blocks / Agent Logs */
+    [data-testid="stCodeBlock"] pre, [data-testid="stCodeBlock"] code, [data-testid="stCodeBlock"] span {
+        background-color: #ffffff !important;
+        color: #0a0a0a !important;
     }
 
-    /* Selectbox */
-    [data-baseweb="select"] {
-        font-family: 'League Spartan', sans-serif !important;
+    /* Checkbox & Text Labels */
+    .stCheckbox label span, .stCheckbox label p, [data-testid="stWidgetLabel"] {
+        color: #0a0a0a !important;
     }
-    [data-baseweb="select"] * {
-        color: #000000 !important;
-        font-family: 'League Spartan', sans-serif !important;
-    }
+    
+    /* Plotly generic */
+    .js-plotly-plot .plotly .main-svg { background-color: transparent !important; }
 </style>
 """, unsafe_allow_html=True)
+
+
+# Helper: Format a section header with '0X' prefix
+def section_header(prefix: str, title: str):
+    st.markdown(f"""
+        <div style="border-top: 2px solid #0a0a0a; padding-top: 1rem; margin-top: 2rem; margin-bottom: 1.5rem; display: flex; align-items: baseline; gap: 1rem;">
+            <span style="font-family: 'Syne', sans-serif; font-size: 0.9rem; color: #6b6b6b; font-weight: 600;">{prefix}</span>
+            <span style="font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; color: #0a0a0a;">{title}</span>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+# Fetch last run timestamp
+def get_last_run_timestamp():
+    db_path = "db/proposals.db"
+    if not os.path.exists(db_path):
+        return "N/A"
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT created_at FROM proposals ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            # simple format conversion if it's ISO
+            return row[0].replace("T", " ")[:19]
+    except Exception:
+        pass
+    return "N/A"
 
 
 # ─────────────────────────────────────────────────────────────
 # Sidebar
 # ─────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("## 📄 Grant Proposal Generator")
-    st.markdown("---")
+    st.markdown("<h1 style='margin-bottom:0;'>AI Grant Proposal<br>Generator</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#6b6b6b; font-style:italic; font-family:\"DM Sans\", sans-serif; margin-top:0.5rem;'>Automated academic research framework</p>", unsafe_allow_html=True)
+    st.markdown("<hr style='margin: 1rem 0;'>", unsafe_allow_html=True)
 
+    st.markdown("<label style='font-family: \"Syne\", sans-serif; color: #0a0a0a; font-weight: 600; font-size: 0.9rem;'>RESEARCH TOPIC</label>", unsafe_allow_html=True)
     research_topic = st.text_area(
-        "Research Topic",
-        placeholder="e.g., AI-powered early detection of crop diseases using drone imagery",
-        height=100,
+        "",
+        placeholder="e.g., AI-powered early detection of crop diseases using drone imagery...",
+        height=180,
         key="research_topic_input",
+        label_visibility="collapsed"
     )
 
+    st.markdown("<label style='font-family: \"Syne\", sans-serif; color: #0a0a0a; font-weight: 600; font-size: 0.9rem; margin-top: 1rem; display: block;'>REFINEMENT ITERATIONS</label>", unsafe_allow_html=True)
     max_iterations = st.slider(
-        "Refinement Iterations",
+        "",
         min_value=1,
         max_value=5,
         value=2,
-        help="Number of evaluate → refine cycles",
+        label_visibility="collapsed"
     )
 
     show_agent_logs = st.checkbox(
         "Show Agent Logs",
         value=False,
-        help="Display detailed reasoning logs from each CrewAI agent",
     )
 
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     generate_btn = st.button(
         "Generate Proposal",
         use_container_width=True,
-        type="primary",
     )
 
-    st.markdown("---")
-    st.markdown(
-        "<small style='color:#999 !important;'>Powered by CrewAI + Google Gemini</small>",
-        unsafe_allow_html=True,
-    )
+    last_run = get_last_run_timestamp()
+    st.markdown(f"<div style='text-align: center; color: #6b6b6b; font-size: 0.75rem; margin-top: 1rem;'>LAST GENERATED: {last_run}</div>", unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────────────────────
 # Main Panel
 # ─────────────────────────────────────────────────────────────
-
-st.markdown("# AI Research Grant Proposal Generator")
-st.markdown("*Transform a research idea into a complete, evaluated, and refined grant proposal.*")
-st.markdown("---")
 
 # Check API key
 if not GEMINI_API_KEY:
@@ -269,7 +316,6 @@ if generate_btn:
     def progress_callback(msg):
         log_messages.append(msg)
         status_placeholder.markdown(f"**Status:** {msg}")
-        # Estimate progress
         progress = min(len(log_messages) / (max_iterations * 5) * 100, 95)
         progress_bar.progress(int(progress))
 
@@ -285,6 +331,7 @@ if generate_btn:
             status_placeholder.markdown("**Status:** ✅ Pipeline complete!")
             st.session_state["result"] = result
             st.session_state["log_messages"] = log_messages
+            st.rerun() # Refresh to update SQLite timestamp
         except Exception as e:
             st.error(f"Pipeline error: {str(e)}")
             st.exception(e)
@@ -307,24 +354,32 @@ if "result" in st.session_state:
     budget = latest["budget"]
     evaluation = latest["evaluation"]
 
-    # Tab layout
-    tab_labels = ["📝 Proposal", "💰 Budget & Timeline", "📊 Evaluation", "🔄 Iteration History"]
+    # Tabs
+    tab_labels = ["PROPOSAL", "BUDGET", "EVALUATION", "HISTORY"]
     has_logs = any(
         any(v for v in it.get("agent_logs", {}).values())
         for it in iterations
     )
     if has_logs:
-        tab_labels.append("🤖 Agent Logs")
+        tab_labels.append("AGENT LOGS")
 
     tabs = st.tabs(tab_labels)
     tab_proposal, tab_budget, tab_eval, tab_history = tabs[0], tabs[1], tabs[2], tabs[3]
     tab_logs = tabs[4] if has_logs else None
 
-    # ---- Proposal Tab ----
+    # ---- Tab 01: Proposal ----
     with tab_proposal:
-        st.markdown(f"### {proposal.get('title', 'Untitled Proposal')}")
-        st.markdown("---")
-
+        section_header("01", proposal.get('title', 'Untitled Proposal'))
+        
+        # Proposal container logic
+        c1, c2 = st.columns([8, 2])
+        with c2:
+            st.markdown(f"""
+                <div style="background: #0a0a0a; color: #fff; padding: 0.5rem 1rem; border-radius: 99px; text-align: center; font-family: 'Syne', sans-serif; font-weight: 700; width: fit-content; margin-left: auto;">
+                    SCORE: {evaluation.get('total_score', 'N/A')}
+                </div>
+            """, unsafe_allow_html=True)
+        
         sections = [
             ("Abstract", "abstract"),
             ("Background / Problem Statement", "background"),
@@ -334,119 +389,128 @@ if "result" in st.session_state:
             ("Deliverables", "deliverables"),
         ]
 
-        for heading, key in sections:
-            content = proposal.get(key, "")
-            if content:
-                st.markdown(f"#### {heading}")
-                st.markdown(content)
-                st.markdown("")
+        # Use a standard container and output the sections as native Markdown.
+        # Streamlit doesn't support wrapping elements in custom HTML safely.
+        with st.container():
+            for heading, key in sections:
+                content = proposal.get(key, "")
+                if content:
+                    st.markdown(f"#### {heading}")
+                    st.markdown(content)
+                    st.divider()
 
-    # ---- Budget Tab ----
+    # ---- Tab 02: Budget ----
     with tab_budget:
-        st.markdown("### Budget Breakdown")
-        if budget.get("budget_table"):
-            st.markdown(budget["budget_table"])
-        else:
-            st.info("No budget data available.")
+        section_header("02", "Budget & Timeline")
+        
+        st.markdown("#### Budget Breakdown")
+        raw_budget = budget.get("budget_table", "")
+        st.markdown(raw_budget if raw_budget else "*No budget data available.*")
 
-        st.markdown("---")
+        st.markdown("#### Timeline Milestones")
+        raw_timeline = budget.get("milestone_schedule", "")
+        st.markdown(raw_timeline if raw_timeline else "*No milestone data available.*")
+            
+        st.markdown("#### Cost Justification")
+        justification = budget.get("cost_justification", "")
+        if justification:
+            st.markdown(f"<blockquote>{justification}</blockquote>", unsafe_allow_html=True)
 
-        st.markdown("### Milestone Schedule")
-        if budget.get("milestone_schedule"):
-            st.markdown(budget["milestone_schedule"])
-        else:
-            st.info("No milestone data available.")
 
-        st.markdown("---")
-
-        st.markdown("### Cost Justification")
-        if budget.get("cost_justification"):
-            st.markdown(budget["cost_justification"])
-        else:
-            st.info("No cost justification available.")
-
-    # ---- Evaluation Tab ----
+    # ---- Tab 03: Evaluation ----
     with tab_eval:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Score", f"{evaluation['total_score']}/100")
-        with col2:
-            st.metric("Rule Score", f"{evaluation['rule_score']}/40")
-        with col3:
-            st.metric("LLM Score", f"{evaluation['llm_score']}/60")
-
-        st.markdown("---")
-
+        section_header("03", "Evaluation Metrics")
+        
+        c1, c2, c3 = st.columns(3)
+        with c1: st.metric("TOTAL SCORE", f"{evaluation.get('total_score', 0)}/100")
+        with c2: st.metric("RULE BASE", f"{evaluation.get('rule_score', 0)}/40")
+        with c3: st.metric("LLM CRITIQUE", f"{evaluation.get('llm_score', 0)}/60")
+        
         st.markdown("#### Rubric Breakdown")
         rubric = evaluation.get("rubric_breakdown", {})
         if rubric:
             for criterion, score in rubric.items():
-                col_name, col_bar, col_score = st.columns([3, 6, 1])
-                with col_name:
-                    st.markdown(f"**{criterion}**")
-                with col_bar:
-                    st.progress(score / 10)
-                with col_score:
-                    st.markdown(f"**{score}**/10")
-        st.markdown("---")
-
-        st.markdown("#### Critique Report")
+                pct = (score / 10) * 100
+                st.markdown(f"""
+                    <div style='display: flex; align-items: center; margin-bottom: 0.8rem; font-family: "DM Sans", sans-serif;'>
+                        <div style='flex: 0 0 200px; font-weight: 600; color: #0a0a0a; text-transform: uppercase; font-size: 0.85rem;'>{criterion}</div>
+                        <div style='flex: 1; background-color: #e0e0e0; height: 8px; margin: 0 1.5rem; position: relative;'>
+                            <div style='background-color: #0a0a0a; height: 100%; width: {pct}%;'></div>
+                        </div>
+                        <div style='flex: 0 0 50px; text-align: right; font-weight: 600; color: #0a0a0a;'>{score}/10</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                
+        st.markdown("#### LLM Critique Report")
         critique = evaluation.get("critique_report", "")
         if critique:
-            st.markdown(critique)
-        else:
-            st.info("No critique available.")
+            st.markdown(f"<blockquote>{critique}</blockquote>", unsafe_allow_html=True)
 
         missing = evaluation.get("missing_sections", [])
         if missing:
-            st.markdown("#### Issues Identified")
+            st.markdown("#### Missing Required Sections")
             for item in missing:
                 st.markdown(f"- {item}")
 
-    # ---- Iteration History Tab ----
-    with tab_history:
-        st.markdown("### Score Progression")
 
+    # ---- Tab 04: History ----
+    with tab_history:
+        section_header("04", "Iteration History")
+        
         if len(iterations) > 1:
             scores = [it["evaluation"]["total_score"] for it in iterations]
-            iter_labels = [f"Iteration {it['iteration']}" for it in iterations]
-
-            chart_data = {
-                "Iteration": iter_labels,
-                "Score": scores,
-            }
-            st.bar_chart(chart_data, x="Iteration", y="Score")
-        else:
-            st.info(
-                f"Only 1 iteration completed (Score: {iterations[0]['evaluation']['total_score']}/100). "
-                "Increase iterations to see improvement progression."
+            iter_labels = [f"Iter {it['iteration']}" for it in iterations]
+            
+            # minimal plotly chart
+            fig = px.line(
+                x=iter_labels, y=scores, 
+                markers=True,
+                labels={"x": "", "y": "Total Score"}
             )
-
-        st.markdown("---")
-        st.markdown("### Iteration Details")
-
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False, zeroline=False, color="#0a0a0a"),
+                yaxis=dict(showgrid=False, zeroline=False, color="#0a0a0a"),
+                font=dict(family="DM Sans", color="#0a0a0a"),
+                margin=dict(l=0, r=0, t=10, b=0),
+                height=300
+            )
+            fig.update_traces(line_color="#0a0a0a", marker=dict(color="#0a0a0a", size=8))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.markdown("*Only 1 iteration completed. Chart available when there are multiple refinements.*")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Iteration cards
         for it in iterations:
-            with st.expander(
-                f"Iteration {it['iteration']} — Score: {it['evaluation']['total_score']}/100",
-                expanded=(it == latest),
-            ):
-                st.markdown(f"**Title:** {it['proposal'].get('title', 'N/A')}")
-                st.markdown(f"**Score:** {it['evaluation']['total_score']}/100")
-
-                if it.get("change_summary"):
+            score = it['evaluation'].get('total_score', 0)
+            iter_num = it['iteration']
+            with st.container():
+                st.markdown(f"""
+                    <div style='border: 1px solid #0a0a0a; background-color: #f5f5f5; padding: 1.5rem; margin-bottom: 1rem;'>
+                        <div style='display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;'>
+                            <div style='font-family: "Syne", sans-serif; font-size: 1.2rem; font-weight: 700; text-transform: uppercase;'>Iteration 0{iter_num}</div>
+                            <div style='background: #0a0a0a; color: #fff; padding: 0.2rem 0.8rem; border-radius: 99px; font-family: "Syne", sans-serif; font-weight: 700; font-size: 0.9rem;'>
+                                SCORE: {score}
+                            </div>
+                        </div>
+                        <div style='font-family: "DM Sans", sans-serif; color: #0a0a0a;'>
+                            <strong>Title:</strong> {it['proposal'].get('title', 'N/A')}
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+                with st.expander(f"Iter 0{iter_num} Details"):
                     st.markdown("**Changes Made:**")
-                    st.markdown(it["change_summary"])
+                    st.markdown(it.get("change_summary", "*No summary available*"))
+                    st.markdown("**Critique:**")
+                    st.markdown(it['evaluation'].get("critique_report", ""))
 
-                st.markdown("**Critique:**")
-                st.markdown(it["evaluation"].get("critique_report", "N/A"))
-
-    # ---- Agent Logs Tab ----
+    # ---- AGENT LOGS ----
     if tab_logs is not None:
         with tab_logs:
-            st.markdown("### Agent Reasoning Logs")
-            st.markdown("*Detailed logs from each CrewAI agent's execution.*")
-            st.markdown("---")
-
+            section_header("05", "Agent Reasoning")
             for it in iterations:
                 agent_logs = it.get("agent_logs", {})
                 if not any(agent_logs.values()):
@@ -454,35 +518,24 @@ if "result" in st.session_state:
                 st.markdown(f"#### Iteration {it['iteration']}")
                 for agent_name, log_text in agent_logs.items():
                     if log_text:
-                        with st.expander(f"{agent_name}", expanded=False):
+                        with st.expander(f"🤖 {agent_name}", expanded=False):
                             st.code(log_text, language="text")
-                st.markdown("---")
 
-    # ---- Pipeline Log ----
-    if "log_messages" in st.session_state:
-        with st.expander("📋 Pipeline Execution Log", expanded=False):
-            for msg in st.session_state["log_messages"]:
-                st.markdown(f"- {msg}")
-
-    # ---- Interactive Features ----
-    st.markdown("---")
-    colA, colB = st.columns([1, 1])
+    # ---- Actions ----
+    st.markdown("<hr style='margin: 3rem 0; border-color: #0a0a0a;'>", unsafe_allow_html=True)
+    c1, c2 = st.columns(2, gap="large")
     
-    with colA:
-        st.markdown("### 📥 Download Final Proposal")
+    with c1:
+        st.markdown("<h4 style='font-family: \"Syne\", sans-serif;'>DOWNLOAD PROPOSAL</h4>", unsafe_allow_html=True)
 
         def _build_pdf(proposal, budget, sections):
             pdf = FPDF()
             pdf.set_auto_page_break(auto=True, margin=15)
             pdf.add_page()
-
-            # Title
             pdf.set_font("Helvetica", "B", 18)
             title = proposal.get("title", "Research Proposal")
             pdf.multi_cell(0, 10, title.encode('latin-1', 'replace').decode('latin-1'))
             pdf.ln(6)
-
-            # Proposal sections
             for heading, key in sections:
                 content = proposal.get(key, "")
                 if content:
@@ -490,12 +543,9 @@ if "result" in st.session_state:
                     pdf.multi_cell(0, 8, heading.encode('latin-1', 'replace').decode('latin-1'))
                     pdf.ln(2)
                     pdf.set_font("Helvetica", "", 11)
-                    # Clean markdown formatting for PDF
-                    clean = content.replace("**", "").replace("*", "").replace("#", "")
+                    clean = content.replace("#", "")
                     pdf.multi_cell(0, 6, clean.encode('latin-1', 'replace').decode('latin-1'))
                     pdf.ln(4)
-
-            # Budget
             pdf.add_page()
             pdf.set_font("Helvetica", "B", 15)
             pdf.multi_cell(0, 10, "Budget & Timeline")
@@ -507,10 +557,9 @@ if "result" in st.session_state:
                     pdf.multi_cell(0, 8, bheading)
                     pdf.ln(2)
                     pdf.set_font("Helvetica", "", 10)
-                    clean = bval.replace("**", "").replace("*", "").replace("#", "").replace("|", "  ")
+                    clean = bval.replace("#", "").replace("|", "  ")
                     pdf.multi_cell(0, 5, clean.encode('latin-1', 'replace').decode('latin-1'))
                     pdf.ln(4)
-
             buf = io.BytesIO()
             pdf.output(buf)
             return buf.getvalue()
@@ -518,7 +567,7 @@ if "result" in st.session_state:
         pdf_bytes = _build_pdf(proposal, budget, sections)
 
         st.download_button(
-            label="Download Proposal (PDF)",
+            label="DOWNLOAD PDF FORMAT",
             data=pdf_bytes,
             file_name="research_proposal.pdf",
             mime="application/pdf",
@@ -526,20 +575,20 @@ if "result" in st.session_state:
             use_container_width=True
         )
 
-    with colB:
-        st.markdown("### 💬 Request Specific Changes")
+    with c2:
+        st.markdown("<h4 style='font-family: \"Syne\", sans-serif;'>REQUEST REVISIONS</h4>", unsafe_allow_html=True)
         user_feedback = st.text_area(
-            "What should be improved?", 
-            placeholder="e.g., Expand the methodology with more details...",
-            label_visibility="collapsed"
+            "Instructions", 
+            placeholder="e.g., Focus more on the computational overhead in methodology...",
+            label_visibility="collapsed",
+            height=100
         )
-        if st.button("Refine Proposal", type="primary", use_container_width=True):
+        if st.button("EXECUTE REFINEMENT", type="primary", use_container_width=True):
             if not user_feedback.strip():
-                st.warning("Please enter feedback first.")
+                st.warning("Please enter revision instructions first.")
             else:
-                with st.spinner("Applying feedback & re-evaluating..."):
+                with st.spinner("Applying instructions & re-evaluating..."):
                     from crew.grant_crew import run_user_refinement_cycle
-                    _verbose = st.session_state.get("show_logs_toggle", False)
                     new_iter = run_user_refinement_cycle(
                         session_id=result["session_id"],
                         research_topic=result["research_topic"],
@@ -553,3 +602,4 @@ if "result" in st.session_state:
                     st.session_state["result"]["iterations"].append(new_iter)
                     st.session_state["log_messages"].append(f"✅ User-requested refinement complete (Score: {new_iter['evaluation']['total_score']}/100)")
                     st.rerun()
+
