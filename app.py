@@ -245,21 +245,12 @@ def get_last_run_timestamp():
 
 
 # ─────────────────────────────────────────────────────────────
-# Sidebar
+# Sidebar & Layout Switching
 # ─────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("<h1 style='margin-bottom:0;'>AI Grant Proposal<br>Generator</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='margin-bottom:0;'>AI Grant Proposal</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color:#6b6b6b; font-style:italic; font-family:\"DM Sans\", sans-serif; margin-top:0.5rem;'>Automated academic research framework</p>", unsafe_allow_html=True)
     st.markdown("<hr style='margin: 1rem 0;'>", unsafe_allow_html=True)
-
-    st.markdown("<label style='font-family: \"Syne\", sans-serif; color: #0a0a0a; font-weight: 600; font-size: 0.9rem;'>RESEARCH TOPIC</label>", unsafe_allow_html=True)
-    research_topic = st.text_area(
-        "",
-        placeholder="e.g., AI-powered early detection of crop diseases using drone imagery...",
-        height=180,
-        key="research_topic_input",
-        label_visibility="collapsed"
-    )
 
     st.markdown("<label style='font-family: \"Syne\", sans-serif; color: #0a0a0a; font-weight: 600; font-size: 0.9rem; margin-top: 1rem; display: block;'>REFINEMENT ITERATIONS</label>", unsafe_allow_html=True)
     max_iterations = st.slider(
@@ -274,16 +265,120 @@ with st.sidebar:
         "Show Agent Logs",
         value=False,
     )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    generate_btn = st.button(
-        "Generate Proposal",
-        use_container_width=True,
-    )
-
+    
+    # Render the input in the sidebar ONLY if a result is present
+    if "result" in st.session_state:
+        st.markdown("<hr style='margin: 1rem 0;'>", unsafe_allow_html=True)
+        st.markdown("<label style='font-family: \"Syne\", sans-serif; color: #0a0a0a; font-weight: 600; font-size: 0.9rem;'>NEW RESEARCH TOPIC</label>", unsafe_allow_html=True)
+        sidebar_topic = st.text_area(
+            "New Topic",
+            height=120,
+            key="sidebar_topic_input",
+            label_visibility="collapsed"
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+        sidebar_generate = st.button(
+            "Generate Another",
+            use_container_width=True,
+            key="btn_sidebar"
+        )
+    
     last_run = get_last_run_timestamp()
-    st.markdown(f"<div style='text-align: center; color: #6b6b6b; font-size: 0.75rem; margin-top: 1rem;'>LAST GENERATED: {last_run}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center; color: #6b6b6b; font-size: 0.75rem; margin-top: 2rem;'>LAST GENERATED: {last_run}</div>", unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────────────────────
+# Main Panel View Logic
+# ─────────────────────────────────────────────────────────────
+research_topic = ""
+generate_btn = False
+
+if "result" not in st.session_state:
+    # ─── 1. Landing Page / Hero Section ───
+    st.markdown("""
+        <style>
+        [data-testid="stHeader"] { display: none; background-color: transparent !important; }
+        .block-container { max-width: 1200px !important; padding-top: 0 !important; }
+        
+        /* Hero UI Overrides */
+        [data-testid="stTextArea"] {
+            background-color: #fcfcfc !important;
+            border: 1px solid #0a0a0a !important;
+            border-radius: 40px !important;
+            box-shadow: 0px 10px 40px 5px rgba(194,194,194,0.25) !important;
+            padding: 1rem 1.5rem !important;
+            animation: fadeInUp 0.8s ease-out 0.5s both;
+        }
+        [data-testid="stTextArea"] textarea {
+            border: none !important;
+            background: transparent !important;
+            font-size: 1.1rem !important;
+        }
+        [data-testid="stButton"] button {
+            background: linear-gradient(180deg, #333 0%, #0a0a0a 100%) !important;
+            box-shadow: inset -4px -6px 25px 0px rgba(201,201,201,0.08), inset 4px 4px 10px 0px rgba(29,29,29,0.24) !important;
+            border-radius: 40px !important;
+            border: none !important;
+            padding: 1.5rem !important;
+            color: white !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.05em !important;
+            font-family: 'Syne', sans-serif !important;
+            font-weight: 700 !important;
+            display: block;
+            animation: fadeInUp 0.8s ease-out 0.6s both;
+        }
+        [data-testid="stButton"] p { font-size: 1.1rem !important; }
+        
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-delay-1 { animation: fadeInUp 0.8s ease-out 0.1s both; }
+        .animate-delay-2 { animation: fadeInUp 0.8s ease-out 0.3s both; }
+        .animate-delay-4 { animation: fadeInUp 0.8s ease-out 0.7s both; }
+        </style>
+        
+        <video autoplay loop muted playsinline style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: cover; transform: scaleY(-1); z-index: -2;">
+          <source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260302_085640_276ea93b-d7da-4418-a09b-2aa5b490e838.mp4" type="video/mp4">
+        </video>
+        <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: -1; background: linear-gradient(to bottom, rgba(255,255,255,0) 26.416%, white 66.943%); pointer-events: none;"></div>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; text-align: center; padding-top: 15vh; gap: 32px; margin-bottom: 2rem;">
+            <h1 class="animate-delay-1" style="font-family: 'Syne', sans-serif; font-weight: 700; font-size: 80px; letter-spacing: -0.02em; color: #0a0a0a; line-height: 1.1; margin: 0;">
+                Automated <span style="font-family: 'DM Sans', sans-serif; font-style: italic; font-size: 100px; font-weight: 400;">academic</span> research framework
+            </h1>
+            <p class="animate-delay-2" style="font-family: 'DM Sans', sans-serif; font-size: 18px; color: #373a46; opacity: 0.8; max-width: 554px; line-height: 1.5; margin: 0;">
+                Transform complex research topics into comprehensively structured, agency-ready grant proposals through evaluating multi-agent refinement.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1.5, 5, 1.5])
+    with col2:
+        research_topic = st.text_area(
+            "Research Topic",
+            placeholder="Describe your research objective... e.g., AI-powered early detection of crop diseases using drone imagery",
+            height=120,
+            key="hero_topic_input",
+            label_visibility="collapsed"
+        )
+        st.markdown("<br>", unsafe_allow_html=True)
+        generate_btn = st.button("Generate Proposal", use_container_width=True, key="btn_hero")
+        
+    st.markdown("""
+        <div class="animate-delay-4" style="text-align: center; margin-top: 40px; display: flex; flex-direction: column; align-items: center;">
+            <div style="font-family: 'Syne', sans-serif; font-weight: 600; font-size: 14px; text-transform: uppercase; color: #0a0a0a; border: 1px solid #0a0a0a; padding: 10px 24px; border-radius: 99px; background: rgba(255,255,255,0.7); backdrop-filter: blur(10px);">
+                ⭐ 1,400+ Proposals Generated
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+else:
+    # ─── 2. Results Mode ───
+    research_topic = st.session_state.get("sidebar_topic_input", "")
+    generate_btn = st.session_state.get("btn_sidebar", False)
+
 
 
 # ─────────────────────────────────────────────────────────────
